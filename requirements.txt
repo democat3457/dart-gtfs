@@ -1,0 +1,2 @@
+TableauScraper~=0.1.29
+gtfs_kit~=6.1.0
