@@ -17,6 +17,10 @@ class GTFS:
     @property
     def routes(self) -> pd.DataFrame:
         return self._feed.routes
+    
+    def get_description_value(self, key: str) -> str:
+        descrip = self._feed.describe()
+        return descrip[descrip["indicator"] == key]["value"].iat[0]
 
     def get_map(self, route_ids:list[str]=None, color_palette:list[str]=None) -> folium.Map:
         if route_ids is None:

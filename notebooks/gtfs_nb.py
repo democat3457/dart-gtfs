@@ -22,6 +22,8 @@
 from pathlib import Path
 import gtfs_kit as gk
 import folium
+from datetime import time, timedelta
+import pandas as pd
 
 data_folder = Path("../data")
 if not data_folder.exists():
@@ -46,7 +48,8 @@ Path().cwd()
 
 # %%
 feed = gk.read_feed(file, dist_units="mi")
-feed.describe()
+descrip = feed.describe()
+descrip[descrip["indicator"]=="end_date"]["value"].iat[0]
 
 # %%
 routes = feed.routes
@@ -103,7 +106,29 @@ feed.compute_route_stats(trip_stats, ["20241216"]).to_csv(export_folder / "route
 feed.compute_route_time_series(trip_stats, ["20241216"]).to_csv(export_folder / "route_time_series_20241216.csv")
 
 # %%
-feed.build_stop_timetable("22750", ["20241216"])
+akard_timetable = feed.build_stop_timetable("22750", ["20241216"])
+akard_timetable
+
+# %%
+tt = akard_timetable.copy()
+tt["arrival_time"] = pd.to_timedelta(tt["arrival_time"])
+tt["departure_time"] = pd.to_timedelta(tt["departure_time"])
+
+# %%
+tt["arrival_time"].iat[-1] < timedelta(hours=20)
+
+# %%
+nn = tt[pd.notna(tt["arrival_time"])]
+nn[(nn["departure_time"] >= timedelta(hours=9)) & (nn["arrival_time"] <= timedelta(hours=11, minutes=30))]
+
+# %%
+mask = pd.notna(nn["departure_time"]) & pd.notna(nn["arrival_time"])
+mask &= nn["departure_time"] >= timedelta(hours=9)
+mask &= nn["arrival_time"] <= timedelta(hours=11, minutes=30)
+nn[mask]
+
+# %%
+feed.build_route_timetable('25826', ['20241216'])
 
 # %%
 dtstf = feed.append_dist_to_stop_times()
@@ -115,10 +140,13 @@ print(dtstf)
 feed.stop_times
 
 # %%
-feed.stop_times[feed.stop_times["trip_id"]=="8107832"]
+feed.stop_times[feed.stop_times["trip_id"] == "8211247"]
 
 # %%
 feed.stop_times[feed.stop_times["timepoint"]==1]
+
+# %%
+feed.trips[feed.trips["trip_id"]=='8211247']
 
 # %%
 feed.trips[feed.trips["route_id"] == "25753"]
