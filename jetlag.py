@@ -13,7 +13,7 @@ import requests
 import shutil
 
 START_TIME = datetime(2024, 12, 16, 9, 0, 0)
-HIDE_DURATION = timedelta(minutes=15)
+HIDE_DURATION = timedelta(minutes=30)
 START_STOP = 22750 # Akard
 WALKING_SPEED = 1.06 # m/s
 
@@ -65,7 +65,7 @@ def dt_minus_date(dt: datetime, d: date):
 
 @functools.lru_cache()
 def get_stop_timetable(stop: StopId):
-    tt = gtfs.feed.build_stop_timetable(str(stop), [today])
+    tt = gtfs.build_stop_timetable(str(stop), [today])
     tt["arrival_time"] = pd.to_timedelta(tt["arrival_time"])
     tt["departure_time"] = pd.to_timedelta(tt["departure_time"])
     return tt
@@ -87,9 +87,10 @@ def trips_between_for_stop(stop: StopId, t1: Timeish, t2: Timeish):
 stop_times: pd.DataFrame = gtfs.feed.stop_times
 stop_times["arrival_time"] = pd.to_timedelta(stop_times["arrival_time"])
 stop_times["departure_time"] = pd.to_timedelta(stop_times["departure_time"])
+stop_times_by_trip = stop_times.groupby(["trip_id"], sort=False)
 
 def get_future_stops_on_trip(trip: TripId, stop_seq: StopSeq = 0):
-    st = stop_times[stop_times["trip_id"] == str(trip)]
+    st = stop_times_by_trip.get_group((str(trip),))
     return st[st["stop_sequence"] > int(stop_seq)]
 
 visited_stops: dict[str, tuple[datetime, tuple[str]]] = dict() # stop_id : first time we reach stop, fastest route combo

@@ -1,9 +1,12 @@
 # DART GTFS data: https://www.dart.org/about/about-dart/fixed-route-schedule
 # https://www.dart.org/transitdata/latest/google_transit.zip
 
+from collections import defaultdict
 from pathlib import Path
 import gtfs_kit as gk
+import numpy as np
 import pandas as pd
+from pandas.core.groupby import DataFrameGroupBy
 import folium
 import geopandas as gpd
 from shapely.geometry import Point
@@ -34,6 +37,8 @@ class CoordsUtil:
 class GTFS:
     def __init__(self, gtfs_file: Path):
         self._feed = gk.read_feed(gtfs_file, dist_units="mi")
+        self._merged_trips_and_stoptimes: DataFrameGroupBy[tuple, True] | None = None
+        self._trip_activities_by_dates: dict[tuple[str], pd.DataFrame] = dict()
 
     @property
     def feed(self):
@@ -57,3 +62,43 @@ class GTFS:
         if color_palette is not None:
             kwargs["color_palette"] = color_palette
         return self._feed.map_routes(route_ids, show_stops=False, **kwargs)
+
+    def build_stop_timetable(self, stop_id: str, dates: list[str]) -> pd.DataFrame:
+        """
+        Return a DataFrame containing the timetable for the given stop ID
+        and dates (YYYYMMDD date strings)
+
+        Return a DataFrame whose columns are all those in ``feed.trips`` plus those in
+        ``feed.stop_times`` plus ``'date'``, and the stop IDs are restricted to the given
+        stop ID.
+        The result is sorted by date then departure time.
+        
+        Adapted from the gtfs_kit.Feed.build_stop_timetable method to use caching of key
+        variables and optimize fetching of stops by ID.
+        """
+        dates = self._feed.subset_dates(dates)
+        if not dates:
+            return pd.DataFrame()
+
+        if self._merged_trips_and_stoptimes is None:
+            merged = pd.merge(
+                self._feed.trips, self._feed.stop_times
+            )
+            self._merged_trips_and_stoptimes = merged.groupby(["stop_id"], sort=False)
+        t = self._merged_trips_and_stoptimes.get_group((stop_id,))
+
+        tuple_dates = tuple(dates)
+        if tuple_dates not in self._trip_activities_by_dates:
+            self._trip_activities_by_dates[tuple_dates] = self._feed.compute_trip_activity(dates)
+        a = self._trip_activities_by_dates[tuple_dates]
+
+        frames = []
+        for date in dates:
+            # Slice to stops active on date
+            ids = a.loc[a[date] == 1, "trip_id"]
+            f = t[t["trip_id"].isin(ids)].copy()
+            f["date"] = date
+            frames.append(f)
+
+        f = pd.concat(frames)
+        return f.sort_values(["date", "departure_time"])
