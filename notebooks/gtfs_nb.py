@@ -24,6 +24,7 @@ import gtfs_kit as gk
 import folium
 from datetime import time, timedelta
 import pandas as pd
+import geopandas as gpd
 
 data_folder = Path("../data")
 if not data_folder.exists():
@@ -60,6 +61,14 @@ for x in routes[routes["route_long_name"].str.contains("ROSS")]["route_id"]:
 feed.stops
 
 # %%
+pnt1 = Point(80.99456, 7.86795)
+pnt2 = Point(80.97454, 7.872174)
+points_df = gpd.GeoDataFrame({"geometry": [pnt1, pnt2]}, crs="EPSG:4326")
+points_df = points_df.to_crs("EPSG:5234")
+points_df2 = points_df.shift()  # We shift the dataframe by 1 to align pnt1 with pnt2
+points_df.distance(points_df2).iloc[1]
+
+# %%
 from pykml import parser
 with (data_folder / "Boundary.kml").open() as f:
     doc = parser.parse(f)
@@ -67,6 +76,34 @@ with (data_folder / "Boundary.kml").open() as f:
 boundary_coords = [ tuple(map(float, line.strip().split(',')))[1::-1] for line in doc.findall(".//{http://www.opengis.net/kml/2.2}Placemark")[0].find(
     ".//{http://www.opengis.net/kml/2.2}coordinates"
 ).text.strip().splitlines() ]
+
+# %%
+stop = "22750"
+from shapely.geometry import Point
+row = feed.stops[feed.stops["stop_id"] == stop].iloc[0]
+lat, lon = row["stop_lat"], row["stop_lon"]
+gdf = gpd.GeoDataFrame({'geometry': [Point(lon, lat), Point(lon+2, lat-2)]}, crs='EPSG:4326')
+fgds = gdf.to_crs('EPSG:6583').buffer(1900*3).to_crs('EPSG:4326')
+fgdf = gpd.GeoDataFrame(geometry=fgds)
+stops = feed.get_stops_in_area(fgdf)
+
+print(stops)
+
+m = folium.Map(location=[32.7769, -96.7972], zoom_start=10)
+
+for idx, stop in stops.iterrows():
+    name, lat, lon = stop["stop_name"], stop["stop_lat"], stop["stop_lon"]
+    folium.Circle(
+        location=[lat, lon],
+        popup=name,
+        # fill_color="#f00",
+        # fill_opacity=0.5,
+        # weight=0,
+        radius=50,
+    ).add_to(m)
+
+# folium.Polygon(locations=boundary_coords, color="black", fill=False).add_to(m)
+m
 
 # %%
 m = folium.Map(location=[32.7769, -96.7972], zoom_start=10)
