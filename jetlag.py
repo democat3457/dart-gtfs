@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from collections import defaultdict
 import functools
 import heapq
 
 import pandas as pd
-from shapely import Point
+import shapely
 from tqdm import tqdm
 from gtfslib import GTFS, CoordsUtil, Projections
 from pathlib import Path
@@ -53,7 +52,6 @@ if download_file:
     gtfs = GTFS(file)
 
 StopId = str | int
-# RouteId = str | int
 TripId = str | int
 StopSeq = int
 Timeish = time | timedelta
@@ -197,12 +195,12 @@ while len(queue):
     walking_distance = WALKING_SPEED * remaining_time.seconds
     stop_df = gtfs.get_stop(stop_id)
     buffered_area = CoordsUtil.buffer_points(walking_distance, stop_df)
+    stop_geometry = stop_df.iloc[0]["geometry"]
     stops_in_area = gtfs.get_stops_in_area(buffered_area)
-    for i in stops_in_area.index:
-        row_gdf = stops_in_area.loc[[i]]
-        distance_to_stop = CoordsUtil.coord_distance(stop_df, row_gdf)
+    for _, row in stops_in_area.iterrows():
+        distance_to_stop = shapely.distance(stop_geometry, row["geometry"])
         arrival_time = td + (distance_to_stop / WALKING_SPEED * timedelta(seconds=1))
-        future_stop_id = row_gdf["stop_id"].iloc[0]
+        future_stop_id = row["stop_id"]
         push_to_queue(arrival_time, future_stop_id, routes.append("walking"))
 
 t.close()
