@@ -181,11 +181,15 @@ for stop_id, (dt, routes) in visited_stops.items():
         'Steps:'
     ]
     popup_lines += route_text
+    popup = folium.Popup(
+        "<br>".join(popup_lines),
+        max_width=300
+    )
 
     folium.Circle(
         location=[lat, lon],
         tooltip=name,
-        popup='<br>'.join(popup_lines),
+        popup=popup,
         fill_color="#00f" if is_rail_station else "#f00",
         fill_opacity=0.2,
         color="black",
