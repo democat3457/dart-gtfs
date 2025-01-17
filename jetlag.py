@@ -48,6 +48,7 @@ if file.exists():
         download_file = False
 
 if download_file:
+    print("Downloading DART GTFS zip file...")
     r = requests.get(
         "https://www.dart.org/transitdata/latest/google_transit.zip", stream=True
     )
