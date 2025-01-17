@@ -3,8 +3,9 @@ import functools
 import heapq
 
 import pandas as pd
+from shapely import Point
 from tqdm import tqdm
-from gtfslib import GTFS, CoordsUtil
+from gtfslib import GTFS, CoordsUtil, Projections
 from pathlib import Path
 import folium
 from datetime import datetime, timedelta, date, time
@@ -13,7 +14,7 @@ import requests
 import shutil
 
 START_TIME = datetime(2024, 12, 16, 9, 0, 0)
-HIDE_DURATION = timedelta(minutes=30)
+HIDE_DURATION = timedelta(minutes=90)
 START_STOP = 22750 # Akard
 WALKING_SPEED = 1.06 # m/s
 
@@ -125,8 +126,8 @@ while len(queue):
     stop_timetable = trips_between_for_stop(stop_id, td, end_timedelta)
     first_available_routes = stop_timetable.drop_duplicates('route_id', keep='first')
     # print(stop_timetable)
-    for _, row in first_available_routes.iterrows():
-        trip_id, stop_seq, trip_name = row["trip_id"], row["stop_sequence"], row["trip_headsign"]
+    for _, row_gdf in first_available_routes.iterrows():
+        trip_id, stop_seq, trip_name = row_gdf["trip_id"], row_gdf["stop_sequence"], row_gdf["trip_headsign"]
         if trip_id in visited_trips:
             continue
         visited_trips.add(trip_id)
@@ -146,13 +147,13 @@ while len(queue):
     remaining_time = end_timedelta - td
     walking_distance = WALKING_SPEED * remaining_time.seconds
     stop_df = gtfs.get_stop(stop_id)
-    lat, lon = stop_df["stop_lat"], stop_df["stop_lon"]
-    buffered_area = CoordsUtil.buffer_points(walking_distance, (lat, lon))
-    stops_in_area = gtfs.feed.get_stops_in_area(buffered_area)
-    for _, row in stops_in_area.iterrows():
-        distance_to_stop = CoordsUtil.coord_distance((lat, lon), (row["stop_lat"], row["stop_lon"]))
+    buffered_area = CoordsUtil.buffer_points(walking_distance, stop_df)
+    stops_in_area = gtfs.get_stops_in_area(buffered_area)
+    for i in stops_in_area.index:
+        row_gdf = stops_in_area.loc[[i]]
+        distance_to_stop = CoordsUtil.coord_distance(stop_df, row_gdf)
         arrival_time = td + (distance_to_stop / WALKING_SPEED * timedelta(seconds=1))
-        future_stop_id = row["stop_id"]
+        future_stop_id = row_gdf["stop_id"].iloc[0]
         push_to_queue(arrival_time, future_stop_id, routes + ("walking",))
 
 t.close()
@@ -165,8 +166,9 @@ print(f'Evaluated {len(visited_trips)} trips and found {len(visited_stops)} reac
 m = folium.Map(location=[32.7769, -96.7972], zoom_start=10)
 
 for stop_id, (dt, routes) in visited_stops.items():
-    stop = gtfs.get_stop(stop_id)
-    name, lat, lon = stop["stop_name"], stop["stop_lat"], stop["stop_lon"]
+    stop = gtfs.get_stop(stop_id).to_crs(Projections.WGS84).iloc[0]
+    name, point = stop["stop_name"], stop.geometry
+    lon, lat = point.x, point.y
     is_rail_station = "station" in name.lower()
     route_text = []
     if not len(routes):

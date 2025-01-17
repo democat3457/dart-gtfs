@@ -9,36 +9,42 @@ import pandas as pd
 from pandas.core.groupby import DataFrameGroupBy
 import folium
 import geopandas as gpd
-from shapely.geometry import Point
+from shapely import Point
 
 class Projections:
     WGS84 = 'EPSG:4326'
     GMAPS = 'EPSG:3857'
-    DALLAS = 'EPSG:6583'
 
 class CoordsUtil:
     @staticmethod
-    def buffer_points(distance_meters: float, *lat_lon_list: tuple[float, float]) -> gpd.GeoDataFrame:
-        gdf = gpd.GeoDataFrame(
-            {"geometry": [ Point(lon, lat) for lat, lon in lat_lon_list ]}, crs=Projections.WGS84
-        )
-        proj_geoseries = gdf.to_crs(Projections.DALLAS).buffer(distance_meters).to_crs(Projections.WGS84)
+    def _to_projected_crs(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+        if not gdf.crs.is_projected:
+            gdf = gdf.to_crs(gdf.estimate_utm_crs())
+        return gdf
+
+    @staticmethod
+    def buffer_points(distance_meters: float, gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+        old_crs = None
+        gdf = CoordsUtil._to_projected_crs(gdf)
+        proj_geoseries: gpd.GeoSeries = gdf.buffer(distance_meters)
+        if old_crs:
+            proj_geoseries = proj_geoseries.to_crs(old_crs)
         return gpd.GeoDataFrame(geometry=proj_geoseries)
 
     @staticmethod
-    def coord_distance(lat_lon_1: tuple[float, float], lat_lon_2: tuple[float, float]) -> float:
-        points_df = gpd.GeoDataFrame(
-            {"geometry": [ Point(lon, lat) for lat, lon in (lat_lon_1, lat_lon_2) ]}, crs=Projections.WGS84
-        )
-        points_df = points_df.to_crs(Projections.DALLAS)
-        points_df2 = points_df.shift()  # We shift the dataframe by 1 to align pnt1 with pnt2
-        return points_df.distance(points_df2).iloc[1]
+    def coord_distance(gdf1: gpd.GeoDataFrame, gdf2: gpd.GeoDataFrame) -> float:
+        gdf1 = CoordsUtil._to_projected_crs(gdf1)
+        gdf2 = CoordsUtil._to_projected_crs(gdf2)
+        return gdf1.distance(gdf2, align=False).iloc[0]
 
 class GTFS:
     def __init__(self, gtfs_file: Path):
         self._feed = gk.read_feed(gtfs_file, dist_units="mi")
+        self._feed_description = self.feed.describe().set_index("indicator")["value"].to_dict()
+        self._geostops = self.feed.get_stops(as_gdf=True, use_utm=True)
         self._merged_trips_and_stoptimes: DataFrameGroupBy[tuple, True] | None = None
         self._trip_activities_by_dates: dict[tuple[str], pd.DataFrame] = dict()
+        self._stops_by_id: gpd.GeoDataFrame = self.stops.set_index("stop_id", drop=False)
 
     @property
     def feed(self):
@@ -46,14 +52,19 @@ class GTFS:
 
     @property
     def routes(self) -> pd.DataFrame:
-        return self._feed.routes
+        return self.feed.routes
+
+    @property
+    def stops(self) -> gpd.GeoDataFrame:
+        return self._geostops
 
     def get_description_value(self, key: str) -> str:
-        descrip = self._feed.describe()
-        return descrip[descrip["indicator"] == key]["value"].iat[0]
+        return self._feed_description[key]
 
-    def get_stop(self, stop_id: str | int) -> pd.Series:
-        return self._feed.stops[self._feed.stops["stop_id"] == str(stop_id)].iloc[0]
+    def get_stop(self, stop_id: str | int) -> gpd.GeoDataFrame:
+        df = self._stops_by_id.loc[[str(stop_id)]].copy()
+        df.index.set_names('', inplace=True)
+        return df
 
     def get_map(self, route_ids:list[str]=None, color_palette:list[str]=None) -> folium.Map:
         if route_ids is None:
@@ -61,7 +72,19 @@ class GTFS:
         kwargs = dict()
         if color_palette is not None:
             kwargs["color_palette"] = color_palette
-        return self._feed.map_routes(route_ids, show_stops=False, **kwargs)
+        return self.feed.map_routes(route_ids, show_stops=False, **kwargs)
+
+    def get_stops_in_area(self, area: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+        """
+        Return the subset of ``feed.stops`` that contains all stops that lie
+        within the given GeoDataFrame of polygons.
+        """
+        if self.stops.crs != area.crs:
+            area = area.to_crs(self.stops.crs)
+        return self.stops.merge(
+            gpd.sjoin(self.stops, area)
+            .filter(["stop_id"])
+        )
 
     def build_stop_timetable(self, stop_id: str, dates: list[str]) -> pd.DataFrame:
         """
@@ -76,20 +99,20 @@ class GTFS:
         Adapted from the gtfs_kit.Feed.build_stop_timetable method to use caching of key
         variables and optimize fetching of stops by ID.
         """
-        dates = self._feed.subset_dates(dates)
+        dates = self.feed.subset_dates(dates)
         if not dates:
             return pd.DataFrame()
 
         if self._merged_trips_and_stoptimes is None:
             merged = pd.merge(
-                self._feed.trips, self._feed.stop_times
+                self.feed.trips, self.feed.stop_times
             )
             self._merged_trips_and_stoptimes = merged.groupby(["stop_id"], sort=False)
         t = self._merged_trips_and_stoptimes.get_group((stop_id,))
 
         tuple_dates = tuple(dates)
         if tuple_dates not in self._trip_activities_by_dates:
-            self._trip_activities_by_dates[tuple_dates] = self._feed.compute_trip_activity(dates)
+            self._trip_activities_by_dates[tuple_dates] = self.feed.compute_trip_activity(dates)
         a = self._trip_activities_by_dates[tuple_dates]
 
         frames = []
