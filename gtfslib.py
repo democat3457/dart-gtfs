@@ -78,6 +78,9 @@ class GTFS:
         """
         Return the subset of ``feed.stops`` that contains all stops that lie
         within the given GeoDataFrame of polygons.
+        
+        Adapted from the gtfs_kit.Feed.get_stops_in_area method to reduce amount of
+        CRS changes performed.
         """
         if self.stops.crs != area.crs:
             area = area.to_crs(self.stops.crs)

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from collections import defaultdict
 import functools
 import heapq
@@ -94,7 +96,54 @@ def get_future_stops_on_trip(trip: TripId, stop_seq: StopSeq = 0):
     st = stop_times_by_trip.get_group((str(trip),))
     return st[st["stop_sequence"] > int(stop_seq)]
 
-visited_stops: dict[str, tuple[datetime, tuple[str]]] = dict() # stop_id : first time we reach stop, fastest route combo
+
+class RouteCombo:
+    def __init__(self, *trips: str):
+        self.trips: tuple[str, ...] = trips
+
+    def append(self, trip: str) -> RouteCombo:
+        return RouteCombo(*self.trips, trip)
+
+    def get_popup_lines(self) -> list[str]:
+        route_text = ["Steps:"]
+        if not len(self.trips):
+            route_text.append("We started here!")
+        else:
+            route_text += [" - " + route for route in self.trips]
+        return route_text
+
+    def get_last_trip(self) -> str | None:
+        if not len(self.trips):
+            return None
+        return self.trips[-1]
+
+    def __str__(self):
+        return str(self.trips)
+
+    def __iter__(self):
+        return iter(self.trips)
+
+    def __len__(self):
+        return len(self.trips)
+
+    def __lt__(self, other):
+        if not isinstance(other, RouteCombo):
+            raise TypeError
+        return len(self.trips) < len(other.trips)
+
+    def __gt__(self, other):
+        if not isinstance(other, RouteCombo):
+            raise TypeError
+        return len(self.trips) > len(other.trips)
+
+    def __hash__(self):
+        return hash(self.trips)
+
+    def __eq__(self, other):
+        return isinstance(other, Path) and self.trips == other.trips
+
+
+visited_stops: dict[str, tuple[datetime, RouteCombo]] = dict() # stop_id : first time we reach stop, fastest route combo
 visited_trips: set[str] = set()
 
 added_stops: dict[str, timedelta] = dict() # temp dict to stop adding to queue
@@ -102,10 +151,10 @@ added_stops: dict[str, timedelta] = dict() # temp dict to stop adding to queue
 end_timedelta = dt_minus_date(end_time, START_TIME.date())
 
 
-queue = [(timedelta_coerce(START_TIME.time()), str(START_STOP), ())] # time we get there, stop id, tuple with ordered route names
+queue = [(timedelta_coerce(START_TIME.time()), str(START_STOP), RouteCombo())] # time we get there, stop id, route combo
 heapq.heapify(queue)
 
-def push_to_queue(arrival_time: Timeish, stop_id: StopId, routes: tuple[str]):
+def push_to_queue(arrival_time: Timeish, stop_id: StopId, routes: RouteCombo):
     if stop_id in added_stops:
         if arrival_time > added_stops[stop_id]:
             # if stop has already been added and the tentative time is later than the already queued time, skip
@@ -137,10 +186,10 @@ while len(queue):
             if arrival_time > end_timedelta:
                 continue
             future_stop_id = future_stop["stop_id"]
-            push_to_queue(arrival_time, future_stop_id, routes + (trip_name,))
+            push_to_queue(arrival_time, future_stop_id, routes.append(trip_name))
 
     # if we had just walked, walking again is not going to provide new stations
-    if len(routes) and routes[-1] == "walking":
+    if routes.get_last_trip() == "walking":
         continue
 
     # walking calculation
@@ -154,7 +203,7 @@ while len(queue):
         distance_to_stop = CoordsUtil.coord_distance(stop_df, row_gdf)
         arrival_time = td + (distance_to_stop / WALKING_SPEED * timedelta(seconds=1))
         future_stop_id = row_gdf["stop_id"].iloc[0]
-        push_to_queue(arrival_time, future_stop_id, routes + ("walking",))
+        push_to_queue(arrival_time, future_stop_id, routes.append("walking"))
 
 t.close()
 
@@ -170,19 +219,13 @@ for stop_id, (dt, routes) in visited_stops.items():
     name, point = stop["stop_name"], stop.geometry
     lon, lat = point.x, point.y
     is_rail_station = "station" in name.lower()
-    route_text = []
-    if not len(routes):
-        route_text.append('We started here!')
-    else:
-        route_text += [ ' - '+route for route in routes ]
 
     popup_lines = [
         name,
         f'Earliest time: {dt.strftime("%m/%d %H:%M:%S")}',
         '',
-        'Steps:'
     ]
-    popup_lines += route_text
+    popup_lines += routes.get_popup_lines()
     popup = folium.Popup(
         "<br>".join(popup_lines),
         max_width=300
