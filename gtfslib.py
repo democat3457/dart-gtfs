@@ -2,14 +2,30 @@
 # https://www.dart.org/transitdata/latest/google_transit.zip
 
 from collections import defaultdict
+from enum import Enum
+import functools
 from pathlib import Path
 import gtfs_kit as gk
-import numpy as np
 import pandas as pd
 from pandas.core.groupby import DataFrameGroupBy
 import folium
 import geopandas as gpd
-from shapely import Point
+
+class RouteType(Enum):
+    LIGHT_RAIL = 0
+    SUBWAY = 1
+    RAIL = 2
+    BUS = 3
+    FERRY = 4
+    CABLE_TRAM = 5
+    AERIAL_LIFT = 6
+    FUNICULAR = 7
+    TROLLEY = 11
+    MONORAIL = 12
+
+    @classmethod
+    def all(cls):
+        return list(cls)
 
 class Projections:
     WGS84 = 'EPSG:4326'
@@ -45,6 +61,8 @@ class GTFS:
         self._merged_trips_and_stoptimes: DataFrameGroupBy[tuple, True] | None = None
         self._trip_activities_by_dates: dict[tuple[str], pd.DataFrame] = dict()
         self._stops_by_id: gpd.GeoDataFrame = self.stops.set_index("stop_id", drop=False)
+        self._routes_by_id: pd.DataFrame = self.routes.set_index("route_id", drop=False)
+        self._trips_by_id: pd.DataFrame = self.feed.trips.set_index("trip_id", drop=False)
 
     @property
     def feed(self):
@@ -57,6 +75,29 @@ class GTFS:
     @property
     def stops(self) -> gpd.GeoDataFrame:
         return self._geostops
+
+    @functools.cached_property
+    def route_to_type(self) -> dict[str, RouteType]:
+        return {
+            r_id: RouteType(r_type)
+            for r_id, r_type in self._routes_by_id["route_type"].T.to_dict().items()
+        }
+
+    @functools.cached_property
+    def trip_route_types(self) -> dict[str, RouteType]:
+        return {
+            t_id: self.route_to_type[r_id]
+            for t_id, r_id in self._trips_by_id["route_id"].T.to_dict().items()
+        }
+
+    @functools.cached_property
+    def stop_route_types(self) -> dict[str, set[RouteType]]:
+        dct = defaultdict(set)
+        for _, row in self.feed.stop_times.iterrows():
+            dct[row["stop_id"]].add(
+                RouteType(self.trip_route_types[row["trip_id"]])
+            )
+        return dct
 
     def get_description_value(self, key: str) -> str:
         return self._feed_description[key]

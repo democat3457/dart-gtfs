@@ -6,10 +6,11 @@ import heapq
 import pandas as pd
 import shapely
 from tqdm import tqdm
-from gtfslib import GTFS, CoordsUtil, Projections
+from gtfslib import GTFS, CoordsUtil, Projections, RouteType
 from pathlib import Path
 import folium
 from datetime import datetime, timedelta, date, time
+import time as pytime
 
 import requests
 import shutil
@@ -18,6 +19,8 @@ START_TIME = datetime(2024, 12, 16, 9, 0, 0)
 HIDE_DURATION = timedelta(minutes=90)
 START_STOP = 22750 # Akard
 WALKING_SPEED = 1.06 # m/s
+ALLOWED_TRAVEL_MODES = RouteType.all()
+ALLOWED_HIDING_MODES = [ RouteType.LIGHT_RAIL ]
 
 def _dateformat(d):
     return d.strftime('%Y%m%d')
@@ -32,6 +35,9 @@ export_folder = Path("export")
 if not export_folder.exists():
     export_folder.mkdir()
 file = Path(data_folder) / "google_transit.zip"
+
+print("Initializing GTFS...")
+_init_time = pytime.time()
 
 download_file = True
 if file.exists():
@@ -50,6 +56,12 @@ if download_file:
             r.raw.decode_content = True
             shutil.copyfileobj(r.raw, out_file)
     gtfs = GTFS(file)
+
+# Access property to cache elements
+gtfs.stop_route_types
+
+_init_time_stop = pytime.time()
+print(f"Finished initialization in {_init_time_stop-_init_time:.2f}s.")
 
 StopId = str | int
 TripId = str | int
@@ -175,6 +187,11 @@ while len(queue):
     # print(stop_timetable)
     for _, row_gdf in first_available_routes.iterrows():
         trip_id, stop_seq, trip_name = row_gdf["trip_id"], row_gdf["stop_sequence"], row_gdf["trip_headsign"]
+
+        # only travel in allowed route types
+        if gtfs.trip_route_types[trip_id] not in ALLOWED_TRAVEL_MODES:
+            continue
+
         if trip_id in visited_trips:
             continue
         visited_trips.add(trip_id)
@@ -191,6 +208,8 @@ while len(queue):
         continue
 
     # walking calculation
+    if WALKING_SPEED <= 0:
+        continue
     remaining_time = end_timedelta - td
     walking_distance = WALKING_SPEED * remaining_time.seconds
     stop_df = gtfs.get_stop(stop_id)
@@ -216,7 +235,10 @@ for stop_id, (dt, routes) in visited_stops.items():
     stop = gtfs.get_stop(stop_id).to_crs(Projections.WGS84).iloc[0]
     name, point = stop["stop_name"], stop.geometry
     lon, lat = point.x, point.y
-    is_rail_station = "station" in name.lower()
+    is_valid_hiding_spot = any(
+        rtype in ALLOWED_HIDING_MODES
+        for rtype in gtfs.stop_route_types[stop_id]
+    )
 
     popup_lines = [
         name,
@@ -233,11 +255,11 @@ for stop_id, (dt, routes) in visited_stops.items():
         location=[lat, lon],
         tooltip=name,
         popup=popup,
-        fill_color="#00f" if is_rail_station else "#f00",
+        fill_color="#00f" if is_valid_hiding_spot else "#f00",
         fill_opacity=0.2,
         color="black",
         weight=1,
-        radius=804.672 if is_rail_station else 20,
+        radius=804.672 if is_valid_hiding_spot else 20,
     ).add_to(m)
 
 m.save("jetlag.html")
