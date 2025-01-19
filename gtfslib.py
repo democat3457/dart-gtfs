@@ -98,6 +98,13 @@ class GTFS:
                 RouteType(self.trip_route_types[row["trip_id"]])
             )
         return dct
+    
+    @functools.cached_property
+    def stop_names(self) -> dict[str, str]:
+        dct = dict()
+        for _, row in self.stops.iterrows():
+            dct[row["stop_id"]] = row["stop_name"]
+        return dct
 
     def get_description_value(self, key: str) -> str:
         return self._feed_description[key]
