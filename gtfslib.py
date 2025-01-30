@@ -2,6 +2,7 @@
 # https://www.dart.org/transitdata/latest/google_transit.zip
 
 from collections import defaultdict
+from datetime import datetime
 from enum import Enum
 import functools
 from pathlib import Path
@@ -56,7 +57,7 @@ class CoordsUtil:
 class GTFS:
     def __init__(self, gtfs_file: Path):
         self._feed = gk.read_feed(gtfs_file, dist_units="mi")
-        self._feed_description = self.feed.describe().set_index("indicator")["value"].to_dict()
+        self._feed_info: pd.Series = self.feed.feed_info.loc[0]
         self._geostops = self.feed.get_stops(as_gdf=True, use_utm=True)
         self._merged_trips_and_stoptimes: DataFrameGroupBy[tuple, True] | None = None
         self._trip_activities_by_dates: dict[tuple[str], pd.DataFrame] = dict()
@@ -67,6 +68,18 @@ class GTFS:
     @property
     def feed(self):
         return self._feed
+
+    @property
+    def feed_info(self):
+        return self._feed_info
+
+    @functools.cached_property
+    def start_date(self):
+        return datetime.strptime(self.feed_info["feed_start_date"], "%Y%m%d").date()
+
+    @functools.cached_property
+    def end_date(self):
+        return datetime.strptime(self.feed_info["feed_end_date"], "%Y%m%d").date()
 
     @property
     def routes(self) -> pd.DataFrame:
@@ -98,16 +111,13 @@ class GTFS:
                 RouteType(self.trip_route_types[row["trip_id"]])
             )
         return dct
-    
+
     @functools.cached_property
     def stop_names(self) -> dict[str, str]:
         dct = dict()
         for _, row in self.stops.iterrows():
             dct[row["stop_id"]] = row["stop_name"]
         return dct
-
-    def get_description_value(self, key: str) -> str:
-        return self._feed_description[key]
 
     def get_stop(self, stop_id: str | int) -> gpd.GeoDataFrame:
         df = self._stops_by_id.loc[[str(stop_id)]].copy()

@@ -17,7 +17,7 @@ import time as pytime
 import requests
 import shutil
 
-START_TIME = datetime(2024, 12, 16, 9, 0, 0)
+START_TIME = datetime(2025, 1, 20, 9, 0, 0)
 HIDE_DURATION = timedelta(minutes=90)
 START_STOP = 22750 # Akard
 WALKING_SPEED = 1.06 # m/s
@@ -44,9 +44,7 @@ _init_time = pytime.time()
 download_file = True
 if file.exists():
     gtfs = GTFS(file)
-    _startdate = datetime.strptime(gtfs.get_description_value("start_date"), '%Y%m%d').date()
-    _enddate = datetime.strptime(gtfs.get_description_value("end_date"), '%Y%m%d').date()
-    if _startdate <= date.today() <= _enddate:
+    if gtfs.start_date <= date.today() <= gtfs.end_date:
         download_file = False
 
 if download_file:
@@ -222,6 +220,14 @@ visited_trips: set[str] = set()
 added_stops: dict[str, timedelta] = dict() # temp dict to stop adding to queue
 
 end_timedelta = dt_minus_date(end_time, START_TIME.date())
+
+
+if not (gtfs.start_date <= START_TIME.date() <= gtfs.end_date):
+    print("Start time not in GTFS feed range!")
+    quit(1)
+if not (gtfs.start_date <= end_time.date() <= gtfs.end_date):
+    print("End time not in GTFS feed range!")
+    quit(1)
 
 
 queue = [RouteSegmentCollection.starting_collection(START_TIME, str(START_STOP))]

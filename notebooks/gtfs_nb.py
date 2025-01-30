@@ -137,13 +137,16 @@ feed.stops.to_csv(export_folder / "stops.csv")
 
 # %%
 trip_stats = feed.compute_trip_stats()
-feed.compute_route_stats(trip_stats, ["20241216"]).to_csv(export_folder / "route_stats_20241216.csv")
+feed.compute_route_stats(trip_stats, ["20250120"]).to_csv(export_folder / "route_stats_20250120.csv")
 
 # %%
-feed.compute_route_time_series(trip_stats, ["20241216"]).to_csv(export_folder / "route_time_series_20241216.csv")
+feed.compute_route_time_series(trip_stats, ["20250120"]).to_csv(export_folder / "route_time_series_20250120.csv")
 
 # %%
-akard_timetable = feed.build_stop_timetable("22750", ["20241216"])
+print(feed.calendar_dates)
+
+# %%
+akard_timetable = feed.build_stop_timetable("22750", ["20250120"])
 akard_timetable
 
 # %%
@@ -165,7 +168,7 @@ mask &= nn["arrival_time"] <= timedelta(hours=11, minutes=30)
 nn[mask]
 
 # %%
-feed.build_route_timetable('25826', ['20241216'])
+feed.build_route_timetable('25826', ['20250120'])
 
 # %%
 dtstf = feed.append_dist_to_stop_times()
