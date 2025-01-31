@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Jet Lag: The Game - GTFS-Powered Routing</title>
+        <script text="text/javascript">
+            function generateMap() {
+                console.log("teehee");
+
+                var data = {};
+                data["start_time"] = document.getElementById("start-time-picker").value;
+                data["end_time"] = document.getElementById("end-time-picker").value;
+                data["start_stop_id"] = document.getElementById("start-stop-id").value;
+                data["walking_speed"] = document.getElementById("walking-speed").value;
+
+                let path = document.getElementById("jtlg-map-gen-path").value;
+                console.log()
+                fetch(path, {
+                    method: "POST",
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'text/html' },
+                    body: JSON.stringify(data)
+                })
+                .then(res => res.text())
+                .then(text => {
+                    document.getElementById("map-container").innerHTML = text;
+                    // var iframe = document.createElement("iframe");
+                    // iframe.srcdoc = text;
+                    // document.getElementById("map-container").replaceChildren(iframe);
+                    console.log("Request complete! response:", text);
+                });
+            }
+        </script>
+    </head>
+    <body>
+        <input type="hidden" id="jtlg-map-gen-path" value="{{ url_for('jetlag_map') }}" />
+        <h1>Jet Lag: The Game - GTFS-Powered Router</h1>
+        <div id="map-generator-form">
+            <div>
+                <label for="start-time-picker">Choose a start time:</label>
+                <input type="datetime-local" id="start-time-picker" name="start-time-picker" required />
+                <br />
+                <label for="end-time-picker">Choose an end time:</label>
+                <input type="datetime-local" id="end-time-picker" name="end-time-picker" required />
+                <br />
+                <label for="start-stop-id">Starting stop:</label>
+                <select id="start-stop-id" name="start-stop-id">
+                    <option value="22750">Akard Station</option>
+                </select>
+                <br />
+                <label for="walking-speed">Walking speed:</label>
+                <input type="number" id="walking-speed" name="walking-speed" value="1.06" min="0.01" step="0.01" required />
+            </div>
+            <br />
+            <div>
+                <input type="button" onclick="generateMap()" value="Route me!" />
+            </div>
+        </div>
+        <br /><br />
+        <div id="map-container"></div>
+    </body>
+</html>
