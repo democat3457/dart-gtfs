@@ -1,2 +1,2 @@
 #!/bin/sh
-pkill gunicorn
+pkill -9 gunicorn

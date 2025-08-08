@@ -383,9 +383,10 @@ def jetlag_map():
         stops_in_area = gtfs.get_stops_in_area(buffered_area)
         for _, row in stops_in_area.iterrows():
             distance_to_stop = shapely.distance(stop_geometry, row["geometry"])
+            distance_to_stop_miles = distance_to_stop / 1609.34
             arrival_time = td + (distance_to_stop / WALKING_SPEED * timedelta(seconds=1))
             future_stop_id = row["stop_id"]
-            push_to_queue(route_collection.append(td, arrival_time, f"Walk {round(distance_to_stop)} meters", future_stop_id))
+            push_to_queue(route_collection.append(td, arrival_time, f"Walk {distance_to_stop_miles:.2f} miles ({round(distance_to_stop)} m)", future_stop_id))
 
     t.close()
 
