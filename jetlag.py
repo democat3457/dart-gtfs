@@ -343,7 +343,7 @@ def jetlag_map():
             continue
         visited_stops[stop_id] = route_collection
         stop_timetable = trips_between_for_stop(stop_id, today_str, td, end_timedelta)
-        first_available_routes = stop_timetable.drop_duplicates('route_id', keep='first')
+        first_available_routes = stop_timetable.drop_duplicates(('route_id', 'direction_id'), keep='first')
         # print(stop_timetable)
         for _, row_gdf in first_available_routes.iterrows():
             trip_id, stop_seq, trip_name = row_gdf["trip_id"], row_gdf["stop_sequence"], row_gdf["trip_headsign"]
