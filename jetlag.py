@@ -290,7 +290,7 @@ def index():
 
 @app.route("/jetlag-map", methods=['POST'])
 def jetlag_map():
-    data: dict = request.get_json()
+    data = request.form
     START_TIME = datetime.fromisoformat(data.get('start_time', DEFAULT_START_TIME.isoformat()))
     _hide_duration = int(data.get('hide_duration_minutes', DEFAULT_HIDE_DURATION.seconds // 60))
     _end_time = data.get('end_time', None)

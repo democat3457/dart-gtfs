@@ -2,62 +2,56 @@
 <html>
     <head>
         <title>DART JLTG Hiding Location Finder</title>
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.1/jquery.min.js"></script>
         <script text="text/javascript">
-            function generateMap() {
-                document.getElementById("map-container").innerHTML = "Loading... (please don't click the button again!)";
-
-                var data = {};
-                data["start_time"] = document.getElementById("start-time-picker").value;
-                // data["end_time"] = document.getElementById("end-time-picker").value;
-                data["hide_duration_minutes"] = document.getElementById("hide-duration").value;
-                data["start_stop_id"] = document.getElementById("start-stop-id").value;
-                data["walking_speed"] = document.getElementById("walking-speed").value;
-
-                let path = document.getElementById("jtlg-map-gen-path").value;
-                console.log()
-                fetch(path, {
-                    method: "POST",
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'text/html' },
-                    body: JSON.stringify(data)
-                })
-                .then(res => res.text())
-                .then(text => {
-                    document.getElementById("map-container").innerHTML = text;
-                    // var iframe = document.createElement("iframe");
-                    // iframe.srcdoc = text;
-                    // document.getElementById("map-container").replaceChildren(iframe);
-                    console.log("Request complete! response:", text);
+            $(function () {
+                $("#map-form").submit(function () {
+                    document.getElementById("map-iframe").contentWindow.document.open();
+                    var node = document.createElement("p");
+                    node.appendChild(document.createTextNode("Loading... (please don't click the button again!)"));
+                    document.getElementById("map-iframe").contentWindow.document.appendChild(node);
+                    document.getElementById("map-iframe").contentWindow.document.close();
                 });
-            }
+            });
         </script>
+        <style>
+            html, body {
+                height: 100%;
+                margin-top: 0;
+                margin-bottom: 0;
+            }
+
+            #content {
+                height: 100%;
+                display: flex;
+                flex-flow: column;
+            }
+        </style>
     </head>
     <body>
-        <input type="hidden" id="jtlg-map-gen-path" value="{{ url_for('jetlag_map') }}" />
-        <h1>DART Jet Lag: The Game - Hiding Location Finder</h1>
-        <div id="map-generator-form">
-            <div>
-                <label for="start-time-picker">Choose a start time:</label>
-                <input type="datetime-local" id="start-time-picker" name="start-time-picker" min="{{start_date}}" max="{{end_date}}" value="{{now_time}}" required />
-                <br />
-                <!-- <label for="end-time-picker">Choose an end time:</label>
-                <input type="datetime-local" id="end-time-picker" name="end-time-picker" required /> -->
-                <label for="hide-duration">Hide duration (minutes):</label>
-                <input type="number" id="hide-duration" name="hide-duration" min="0" max="100" />
-                <br />
-                <label for="start-stop-id">Starting stop:</label>
-                <select id="start-stop-id" name="start-stop-id">
-                    {% for stop_id, stop_name in starting_stop_list %}<option value="{{stop_id}}">{{stop_name}}</option>{% endfor %}
-                </select>
-                <br />
-                <label for="walking-speed">Walking speed:</label>
-                <input type="number" id="walking-speed" name="walking-speed" value="1.06" min="0.01" step="0.01" required />
+        <div id="content">
+            <div style="flex: 0 1 auto;">
+                <h1>DART Jet Lag: The Game - Hiding Location Finder</h1>
+                <form id="map-form" action="{{ url_for('jetlag_map') }}" target="map-iframe" method="post">
+                    <label for="start-time-picker">Choose a start time:</label>
+                    <input type="datetime-local" id="start-time-picker" name="start_time" min="{{start_date}}" max="{{end_date}}" value="{{now_time}}" required />
+                    <br />
+                    <label for="hide-duration">Hide duration (minutes):</label>
+                    <input type="number" id="hide-duration" name="hide_duration_minutes" min="0" max="100" value="30" required />
+                    <br />
+                    <label for="start-stop-id">Starting stop:</label>
+                    <select id="start-stop-id" name="start_stop_id">
+                        {% for stop_id, stop_name in starting_stop_list %}<option value="{{stop_id}}">{{stop_name}}</option>{% endfor %}
+                    </select>
+                    <br />
+                    <label for="walking-speed">Walking speed:</label>
+                    <input type="number" id="walking-speed" name="walking_speed" value="1.06" min="0.01" step="0.01" required />
+                    <br />
+                    <button>Route me!</button>
+                </form>
             </div>
             <br />
-            <div>
-                <input type="button" onclick="generateMap()" value="Route me!" />
-            </div>
+            <iframe name="map-iframe" id="map-iframe" style="flex: 1 1 auto; width: 100%; border: none;"></iframe>
         </div>
-        <br /><br />
-        <div id="map-container"></div>
     </body>
 </html>
