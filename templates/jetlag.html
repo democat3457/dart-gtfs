@@ -4,11 +4,12 @@
         <title>Jet Lag: The Game - GTFS-Powered Routing</title>
         <script text="text/javascript">
             function generateMap() {
-                console.log("teehee");
+                document.getElementById("map-container").innerHTML = "Loading... (please don't click the button again!)";
 
                 var data = {};
                 data["start_time"] = document.getElementById("start-time-picker").value;
-                data["end_time"] = document.getElementById("end-time-picker").value;
+                // data["end_time"] = document.getElementById("end-time-picker").value;
+                data["hide_duration_minutes"] = document.getElementById("hide-duration").value;
                 data["start_stop_id"] = document.getElementById("start-stop-id").value;
                 data["walking_speed"] = document.getElementById("walking-speed").value;
 
@@ -36,16 +37,16 @@
         <div id="map-generator-form">
             <div>
                 <label for="start-time-picker">Choose a start time:</label>
-                <input type="datetime-local" id="start-time-picker" name="start-time-picker" required />
+                <input type="datetime-local" id="start-time-picker" name="start-time-picker" min="{{start_date}}" max="{{end_date}}" value="{{now_time}}" required />
                 <br />
-                <label for="end-time-picker">Choose an end time:</label>
-                <input type="datetime-local" id="end-time-picker" name="end-time-picker" required />
+                <!-- <label for="end-time-picker">Choose an end time:</label>
+                <input type="datetime-local" id="end-time-picker" name="end-time-picker" required /> -->
+                <label for="hide-duration">Hide duration (minutes):</label>
+                <input type="number" id="hide-duration" name="hide-duration" min="0" max="100" />
                 <br />
                 <label for="start-stop-id">Starting stop:</label>
                 <select id="start-stop-id" name="start-stop-id">
-                    <option value="22750">Akard Station</option>
-                    <option value="29831">Hatcher Station</option>
-                    <option value="22748">EBJ Union Station</option>
+                    {% for stop_id, stop_name in starting_stop_list %}<option value="{{stop_id}}">{{stop_name}}</option>{% endfor %}
                 </select>
                 <br />
                 <label for="walking-speed">Walking speed:</label>

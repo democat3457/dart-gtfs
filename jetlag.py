@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import functools
 import heapq
 import itertools
+from operator import itemgetter
 
 import pandas as pd
 import shapely
@@ -260,9 +261,31 @@ def trips_between_for_stop(stop: StopId, day: str, t1: Timeish, t2: Timeish):
     return df_time_bound(tt, t1, t2)
 
 
+def get_starting_stops():
+    # ALLOWED_HIDING_MODES = [ RouteType[route_type] for route_type in data.get('hiding_modes', _default_allowed_hiding_modes).split(',') ]
+    ALLOWED_HIDING_MODES = [ RouteType[route_type] for route_type in (_default_allowed_hiding_modes).split(',') ]
+    return sorted(
+        filter(
+            lambda stop_info: any(
+                rtype in ALLOWED_HIDING_MODES
+                for rtype in gtfs.stop_route_types[stop_info[0]]
+            ),
+            gtfs.stop_names.items(),
+        ),
+        key=itemgetter(1),
+    )
+
+
 @app.route("/")
 def index():
-    return render_template("jetlag.html")
+    dt_start = datetime.combine(gtfs.start_date, time(0,0))
+    dt_end = datetime.combine(gtfs.end_date, time(23, 59))
+    dt_now = max(datetime.now(), dt_start).replace(second=0, microsecond=0)
+    return render_template("jetlag.html",
+                           starting_stop_list=get_starting_stops(),
+                           now_time=dt_now.isoformat(),
+                           start_date=dt_start.isoformat(),
+                           end_date=dt_end.isoformat())
 
 
 @app.route("/jetlag-map", methods=['POST'])
@@ -277,6 +300,13 @@ def jetlag_map():
     ALLOWED_TRAVEL_MODES = [ RouteType[route_type] for route_type in data.get('travel_modes', _default_allowed_travel_modes).split(',') ]
     ALLOWED_HIDING_MODES = [ RouteType[route_type] for route_type in data.get('hiding_modes', _default_allowed_hiding_modes).split(',') ]
 
+    if not (gtfs.start_date <= START_TIME.date() <= gtfs.end_date):
+        return "<strong>Start time not in GTFS feed range!</strong>"
+    if not (gtfs.start_date <= END_TIME.date() <= gtfs.end_date):
+        return "<strong>End time not in GTFS feed range!</strong>"
+    if not (gtfs.start_date < gtfs.end_date):
+        return "<strong>End time must be after start time!</strong>"
+
     print(data)
     print(START_TIME, END_TIME, START_STOP, WALKING_SPEED)
 
@@ -288,15 +318,6 @@ def jetlag_map():
     added_stops: dict[str, timedelta] = dict() # temp dict to stop adding to queue
 
     end_timedelta = dt_minus_date(END_TIME, START_TIME.date())
-
-
-    if not (gtfs.start_date <= START_TIME.date() <= gtfs.end_date):
-        print("Start time not in GTFS feed range!")
-        quit(1)
-    if not (gtfs.start_date <= END_TIME.date() <= gtfs.end_date):
-        print("End time not in GTFS feed range!")
-        quit(1)
-
 
     queue = [RouteSegmentCollection.starting_collection(START_TIME, str(START_STOP))]
     heapq.heapify(queue)
@@ -327,6 +348,10 @@ def jetlag_map():
         for _, row_gdf in first_available_routes.iterrows():
             trip_id, stop_seq, trip_name = row_gdf["trip_id"], row_gdf["stop_sequence"], row_gdf["trip_headsign"]
             departure_time = timedelta_coerce(row_gdf["departure_time"])
+            if pd.isna(trip_name):
+                # extrapolate trip route name
+                rt_short_name = gtfs._routes_by_id.at[row_gdf["route_id"], "route_short_name"]
+                trip_name = f"{rt_short_name} (NO DEST)"
 
             # only travel in allowed route types
             if gtfs.trip_route_types[trip_id] not in ALLOWED_TRAVEL_MODES:

@@ -32,7 +32,7 @@ if not data_folder.exists():
 export_folder = Path("../export")
 if not export_folder.exists():
     export_folder.mkdir()
-file = Path(data_folder) / "google_transit.zip"
+file = Path(data_folder) / "dart_gtfs.zip"
 
 # %%
 import requests
@@ -134,6 +134,9 @@ print(feed.routes.route_id.loc[0])
 feed.routes.to_csv(export_folder / "routes.csv")
 feed.stops.to_csv(export_folder / "stops.csv")
 # feed.map_routes(rids, show_stops=False)
+
+# %%
+feed.trips.to_csv(export_folder / "trips_aug.csv")
 
 # %%
 trip_stats = feed.compute_trip_stats()
