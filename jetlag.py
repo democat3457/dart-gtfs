@@ -422,6 +422,5 @@ def jetlag_map():
             radius=804.672 if is_valid_hiding_spot else 20,
         ).add_to(m)
 
-    # html = m.get_root().render()
-    # return html
-    return m._repr_html_()
+    html = m.get_root().render()
+    return html
