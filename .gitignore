@@ -7,3 +7,4 @@ map.html
 profile*.json
 /*.html
 .vercel
+.vscode/

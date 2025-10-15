@@ -1,3 +1,4 @@
+import math
 from operator import itemgetter
 from pathlib import Path
 from tableauscraper import TableauScraper as TS
@@ -59,7 +60,7 @@ measure_max = np.max(measure_values)
 
 
 print("Loading GTFS...")
-gtfs = GTFS(data_folder / "google_transit.zip")
+gtfs = GTFS(data_folder / "dart_gtfs.zip")
 routes = gtfs.routes
 routes.to_csv(export_folder / "gtfs_routes.csv")
 
@@ -71,7 +72,8 @@ for index, row in filtered.iterrows():
         matching_routes = routes[routes["route_long_name"].str.contains(route_name)]
     matching_route_ids = matching_routes["route_id"]
     riders = int(row["SUM(MEASURE_VALUE)-value"])
-    scaled_riders = (riders - measure_min) / (measure_max - measure_min)
+    scaled_riders = (riders - measure_min) / (measure_max - measure_min) # between 0-1
+    # scaled_riders = math.sqrt(scaled_riders) # boost lower values
     color_hsv = (max_color - min_color) * scaled_riders + min_color
     color_rgb = [ round(i*255) for i in colorsys.hsv_to_rgb(*color_hsv) ]
     color_hex = f"#{color_rgb[0]:02x}{color_rgb[1]:02x}{color_rgb[2]:02x}"
@@ -82,4 +84,5 @@ map_routes.sort(key=itemgetter(2))
 
 print(f"Generating map into {output_file.name}")
 map = gtfs.get_map(list(map(itemgetter(0), map_routes)), list(map(itemgetter(1), map_routes)))
+# TODO add ridership numbers to map
 map.save(str(output_file.resolve()))
