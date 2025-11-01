@@ -97,18 +97,18 @@ class GTFS:
         }
 
     @functools.cached_property
-    def trip_route_types(self) -> dict[str, RouteType]:
+    def trip_routes(self) -> dict[str, str]:
         return {
-            t_id: self.route_to_type[r_id]
+            t_id: r_id
             for t_id, r_id in self._trips_by_id["route_id"].T.to_dict().items()
         }
 
     @functools.cached_property
-    def stop_route_types(self) -> dict[str, set[RouteType]]:
+    def stop_routes(self) -> dict[str, set[str]]:
         dct = defaultdict(set)
         for _, row in self.feed.stop_times.iterrows():
             dct[row["stop_id"]].add(
-                RouteType(self.trip_route_types[row["trip_id"]])
+                str(self.trip_routes[row["trip_id"]])
             )
         return dct
 

@@ -227,7 +227,7 @@ def init_gtfs(filename: str, url: str):
         _gtfs = GTFS(file)
 
     # Access properties to cache elements
-    _gtfs.stop_route_types
+    _gtfs.stop_routes
     _gtfs.stop_names
 
     _init_time_stop = pytime.time()
@@ -264,11 +264,20 @@ def trips_between_for_stop(stop: StopId, day: str, t1: Timeish, t2: Timeish):
 def get_starting_stops():
     # ALLOWED_HIDING_MODES = [ RouteType[route_type] for route_type in data.get('hiding_modes', _default_allowed_hiding_modes).split(',') ]
     ALLOWED_HIDING_MODES = [ RouteType[route_type] for route_type in (_default_allowed_hiding_modes).split(',') ]
+    ALLOWED_ROUTE_IDS = ["26810"] # overrides hiding modes
+    if len(ALLOWED_ROUTE_IDS):
+        return sorted(
+            filter(
+                lambda stop_info: gtfs.stop_names[stop_info[0]] in ALLOWED_ROUTE_IDS,
+                gtfs.stop_names.items(),
+            ),
+            key=itemgetter(1),
+        )
     return sorted(
         filter(
             lambda stop_info: any(
-                rtype in ALLOWED_HIDING_MODES
-                for rtype in gtfs.stop_route_types[stop_info[0]]
+                gtfs.routes in ALLOWED_HIDING_MODES
+                for r_id in gtfs.stop_routes[stop_info[0]]
             ),
             gtfs.stop_names.items(),
         ),
