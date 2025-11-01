@@ -413,10 +413,11 @@ def jetlag_map():
         stop = gtfs.get_stop(stop_id).to_crs(Projections.WGS84).iloc[0]
         name, point = stop["stop_name"], stop.geometry
         lon, lat = point.x, point.y
-        is_valid_hiding_spot = any(
-            gtfs.route_to_type[r_id] in ALLOWED_HIDING_MODES
-            for r_id in gtfs.stop_routes[stop_id]
-        )
+        # is_valid_hiding_spot = any(
+        #     gtfs.route_to_type[r_id] in ALLOWED_HIDING_MODES
+        #     for r_id in gtfs.stop_routes[stop_id]
+        # )
+        is_valid_hiding_spot = any(r_id == "26810" for r_id in gtfs.stop_routes[stop_id])  # overrides hiding modes for Silver Line
 
         popup = folium.Popup(
             route_collection.populate_waiting().to_str(sep='<br>'),
