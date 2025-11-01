@@ -269,8 +269,8 @@ def get_starting_stops():
         return sorted(
             filter(
                 lambda stop_info: any(
-                    rtype in ALLOWED_ROUTE_IDS
-                    for rtype in gtfs.stop_routes[stop_info[0]]
+                    r_id in ALLOWED_ROUTE_IDS
+                    for r_id in gtfs.stop_routes[stop_info[0]]
                 ),
                 gtfs.stop_names.items(),
             ),
@@ -366,7 +366,7 @@ def jetlag_map():
                 trip_name = f"{rt_short_name} (NO DEST)"
 
             # only travel in allowed route types
-            if gtfs.trip_route_types[trip_id] not in ALLOWED_TRAVEL_MODES:
+            if gtfs.route_to_type[gtfs.trip_to_route[trip_id]] not in ALLOWED_TRAVEL_MODES:
                 continue
 
             if trip_id in visited_trips:
@@ -414,8 +414,8 @@ def jetlag_map():
         name, point = stop["stop_name"], stop.geometry
         lon, lat = point.x, point.y
         is_valid_hiding_spot = any(
-            rtype in ALLOWED_HIDING_MODES
-            for rtype in gtfs.stop_route_types[stop_id]
+            gtfs.route_to_type[r_id] in ALLOWED_HIDING_MODES
+            for r_id in gtfs.stop_routes[stop_id]
         )
 
         popup = folium.Popup(
