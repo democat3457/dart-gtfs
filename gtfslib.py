@@ -6,11 +6,15 @@ from datetime import datetime
 from enum import Enum
 import functools
 from pathlib import Path
+import random
+from typing import Optional
 import gtfs_kit as gk
 import pandas as pd
 from pandas.core.groupby import DataFrameGroupBy
 import folium
 import geopandas as gpd
+import shapely.geometry as sg
+import shapely.ops as so
 
 class RouteType(Enum):
     LIGHT_RAIL = 0
@@ -58,6 +62,7 @@ class GTFS:
     def __init__(self, gtfs_file: Path):
         self._feed = gk.read_feed(gtfs_file, dist_units="mi")
         self._feed_info: pd.Series = self.feed.feed_info.loc[0]
+        self._georoutes = self.feed.get_routes(as_gdf=True, use_utm=True)
         self._geostops = self.feed.get_stops(as_gdf=True, use_utm=True)
         self._merged_trips_and_stoptimes: DataFrameGroupBy[tuple, True] | None = None
         self._trip_activities_by_dates: dict[tuple[str], pd.DataFrame] = dict()
@@ -82,8 +87,8 @@ class GTFS:
         return datetime.strptime(self.feed_info["feed_end_date"], "%Y%m%d").date()
 
     @property
-    def routes(self) -> pd.DataFrame:
-        return self.feed.routes
+    def routes(self) -> gpd.GeoDataFrame:
+        return self._georoutes
 
     @property
     def stops(self) -> gpd.GeoDataFrame:
@@ -124,13 +129,87 @@ class GTFS:
         df.index.set_names('', inplace=True)
         return df
 
-    def get_map(self, route_ids:list[str]=None, color_palette:list[str]=None) -> folium.Map:
+    def get_map(self, route_ids: Optional[dict[str, dict]] = None, show_stops: bool = False) -> folium.Map:
+        """
+        Return a Folium map showing the given routes and (optionally) their stops.
+        If ``route_ids`` is not given, add all routes to the map.
+        If any of the given route IDs are not found in the feed, then raise a ValueError.
+        
+        Adapted from gtfs_kit
+        """
         if route_ids is None:
-            route_ids = self.routes.route_id.loc[:]
-        kwargs = dict()
-        if color_palette is not None:
-            kwargs["color_palette"] = color_palette
-        return self.feed.map_routes(route_ids, show_stops=False, **kwargs)
+            route_ids = { r_id: {} for r_id in self.routes.route_id.loc[:]}
+
+        # Compile route IDs
+        route_id_list = sorted(route_ids.items())
+        if not len(route_id_list):
+            raise ValueError("Route IDs or route short names must be given")
+
+        # Initialize map
+        my_map = folium.Map(tiles="openstreetmap", prefer_canvas=True)
+
+        # Collect route bounding boxes to set map zoom later
+        bboxes = []
+
+        # Create a feature group for each route and add it to the map
+        for i, (route_id, props) in enumerate(route_id_list):
+            collection = self.feed.routes_to_geojson(
+                route_ids=[route_id], include_stops=show_stops
+            )
+
+            # Use route short name for group name if possible; otherwise use route ID
+            route_name = route_id
+            for f in collection["features"]:
+                if "route_short_name" in f["properties"]:
+                    route_name = f["properties"]["route_short_name"]
+                    break
+
+            group = folium.FeatureGroup(name=f"Route {route_name}")
+            color = (
+                props["color"]
+                if "color" in props
+                else "#%06x" % random.randint(0, 0xFFFFFF)
+            )
+
+            for f in collection["features"]:
+                prop = f["properties"]
+                prop.update(props)
+                prop = { k: v for k, v in prop.items() if v is not None }
+
+                # Add stop
+                if f["geometry"]["type"] == "Point":
+                    lon, lat = f["geometry"]["coordinates"]
+                    folium.CircleMarker(
+                        location=[lat, lon],
+                        radius=8,
+                        fill=True,
+                        color=color,
+                        weight=1,
+                        popup=folium.Popup(gk.helpers.make_html(prop)),
+                    ).add_to(group)
+
+                # Add path
+                else:
+                    prop["color"] = color
+                    path = folium.GeoJson(
+                        f,
+                        name=prop["route_short_name"],
+                        style_function=lambda x: {"color": x["properties"]["color"]},
+                    )
+                    path.add_child(folium.Popup(gk.helpers.make_html(prop)))
+                    path.add_to(group)
+                    bboxes.append(sg.box(*sg.shape(f["geometry"]).bounds))
+
+            group.add_to(my_map)
+
+        folium.LayerControl().add_to(my_map)
+
+        # Fit map to bounds
+        bounds = so.unary_union(bboxes).bounds
+        bounds2 = [bounds[1::-1], bounds[3:1:-1]]  # Folium expects this ordering
+        my_map.fit_bounds(bounds2)
+
+        return my_map
 
     def get_stops_in_area(self, area: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         """
