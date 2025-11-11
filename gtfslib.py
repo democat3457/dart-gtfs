@@ -67,7 +67,7 @@ class GTFS:
         self._merged_trips_and_stoptimes: DataFrameGroupBy[tuple, True] | None = None
         self._trip_activities_by_dates: dict[tuple[str], pd.DataFrame] = dict()
         self._stops_by_id: gpd.GeoDataFrame = self.stops.set_index("stop_id", drop=False)
-        self._routes_by_id: pd.DataFrame = self.routes.set_index("route_id", drop=False)
+        self._routes_by_id: gpd.GeoDataFrame = self.routes.set_index("route_id", drop=False)
         self._trips_by_id: pd.DataFrame = self.feed.trips.set_index("trip_id", drop=False)
 
     @property
@@ -146,11 +146,12 @@ class GTFS:
             raise ValueError("Route IDs or route short names must be given")
 
         # Initialize map
-        my_map = folium.Map(tiles="openstreetmap", prefer_canvas=True)
+        my_map = folium.Map(tiles=folium.TileLayer("cartodbpositron", name="Carto DB Positron"), prefer_canvas=True)
 
         # Collect route bounding boxes to set map zoom later
         bboxes = []
 
+        route_group = folium.FeatureGroup(name="Routes")
         # Create a feature group for each route and add it to the map
         for i, (route_id, props) in enumerate(route_id_list):
             collection = self.feed.routes_to_geojson(
@@ -200,9 +201,9 @@ class GTFS:
                     path.add_to(group)
                     bboxes.append(sg.box(*sg.shape(f["geometry"]).bounds))
 
-            group.add_to(my_map)
+            group.add_to(route_group)
 
-        folium.LayerControl().add_to(my_map)
+        route_group.add_to(my_map)
 
         # Fit map to bounds
         bounds = so.unary_union(bboxes).bounds
