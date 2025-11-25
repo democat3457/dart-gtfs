@@ -9,12 +9,12 @@ from gtfslib import GTFS, CoordsUtil, Projections
 import re
 import colorsys
 
-url = "https://tableau.dart.org/t/Public/views/DARTscorecard/DARTScorecard"
-sheetName = "Ridership label KPI"
+url = "https://tableau.dart.org/t/Public/views/DARTscorecard/RidershipPerformance"
 subsheetName = "by Route for DART Bus Service"
 
 data_folder = Path("data")
 export_folder = Path("export")
+route_map_file = Path("route_map.html")
 output_file = Path("map.html")
 
 min_color = np.array((0, 1.0, 1.0))
@@ -33,13 +33,21 @@ print("Loading tableau...")
 ts = TS()
 ts.loads(url)
 
-workbook = ts.getWorkbook()
-ridershipSheet = ts.getWorksheet(sheetName)
-dashboard = ridershipSheet.select("Ridership label", "Ridership Performance")
+ridership_filters = {
+    "total": ("Total Ridership Measure Values", "TOTAL_RIDERSHIP"),
+    "weekday": ("Weekday Avg Measure Values", "AVG_WKDAY_RIDERSHIP"),
+    "saturday": ("Saturday Avg Measure Values", "AVG_SAT_RIDERSHIP"),
+    "sunday": ("Sunday Avg Measure Values", "AVG_SUN_RIDERSHIP"),
+}
+RIDERSHIP_FILTER = "weekday"
 
+workbook = ts.getWorkbook()
+dashboard = workbook.getWorksheet(ridership_filters[RIDERSHIP_FILTER][0]).select(
+    "MEASURE_CODE", ridership_filters[RIDERSHIP_FILTER][1]
+)
 serviceByRoute = dashboard.getWorksheet(subsheetName)
 data: pd.DataFrame = serviceByRoute.data
-data.to_csv(export_folder / "tableau.csv")
+data.to_csv(export_folder / f"tableau_{RIDERSHIP_FILTER}.csv")
 
 columns = [
     "Route-value",
@@ -47,8 +55,6 @@ columns = [
     "SERVICE_CATEGORY-value",
     "SUM(MEASURE_VALUE)-value",
 ]
-
-data["SUM(MEASURE_VALUE)-value"] //= 30 # monthly to daily average
 
 filtered = data[data["SUM(MEASURE_VALUE)-value"]>0].filter(columns, axis="columns")
 def get_route_name(name):
@@ -89,10 +95,15 @@ for index, row in filtered.iterrows():
         map_routes.append((rid, riders, { "daily_ridership": riders, "color": color_hex, "route_desc": None, "route_type": None, "route_text_color": None, "route_url": None }))
 
 map_routes.sort(key=itemgetter(1))
+
+print(len(map_routes))
+print(map_routes)
+
 route_info = {route[0]: route[2] for route in map_routes}
 
 print(f"Generating map into {output_file.name}")
 route_map = gtfs.get_map(route_info)
+route_map.save(str(Path("addison_route_map.html").resolve()))
 
 import restapi
 SERVER_URL = (

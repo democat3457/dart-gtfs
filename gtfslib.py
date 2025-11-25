@@ -116,6 +116,14 @@ class GTFS:
                 str(self.trip_to_route[row["trip_id"]])
             )
         return dct
+    
+    @functools.cached_property
+    def route_stops(self) -> dict[str, set[str]]:
+        dct = defaultdict(set)
+        for stop_id, route_ids in self.stop_routes.items():
+            for route_id in route_ids:
+                dct[route_id].add(stop_id)
+        return dct
 
     @functools.cached_property
     def stop_names(self) -> dict[str, str]:
