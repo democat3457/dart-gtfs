@@ -12,6 +12,8 @@ import colorsys
 url = "https://tableau.dart.org/t/Public/views/DARTscorecard/RidershipPerformance"
 subsheetName = "by Route for DART Bus Service"
 
+ADDISON_TRANSIT_CENTER_STOP_ID = "33245"
+
 data_folder = Path("data")
 export_folder = Path("export")
 route_map_file = Path("route_map.html")
@@ -70,8 +72,8 @@ def get_route_name(name):
     return name
 
 measure_values = filtered["SUM(MEASURE_VALUE)-value"]
-measure_min = np.min(measure_values)
-measure_max = np.max(measure_values)
+measure_min = int(np.min(measure_values))
+measure_max = int(np.max(measure_values))
 
 print(measure_min, measure_max)
 
@@ -92,11 +94,14 @@ for index, row in filtered.iterrows():
     scaled_riders = math.sqrt(scaled_riders) # boost lower values
     color_hex = scale_color(scaled_riders)
     for rid in matching_route_ids:
+        if rid not in gtfs.stop_routes[ADDISON_TRANSIT_CENTER_STOP_ID]:
+            # Skip routes that don't go to Addison Transit Center
+            continue
         map_routes.append((rid, riders, { "daily_ridership": riders, "color": color_hex, "route_desc": None, "route_type": None, "route_text_color": None, "route_url": None }))
 
 map_routes.sort(key=itemgetter(1))
 
-print(len(map_routes))
+print(len(map_routes), sum(route[1] for route in map_routes))
 print(map_routes)
 
 route_info = {route[0]: route[2] for route in map_routes}
@@ -104,6 +109,9 @@ route_info = {route[0]: route[2] for route in map_routes}
 print(f"Generating map into {output_file.name}")
 route_map = gtfs.get_map(route_info)
 route_map.save(str(Path("addison_route_map.html").resolve()))
+
+# Skip efficiency coloring
+quit()
 
 import restapi
 SERVER_URL = (
